@@ -2,13 +2,14 @@
 
 Discord bot that exports a server's channels/messages/attachments and imports into Zentra.
 
-## Features
-- Slash command `/export_to_zentra`
-- Exports channel structure + message history + attachment metadata
-- Uploads to Zentra backend endpoint: `POST /api/v1/communities/import/discord`
-- Replies in Discord with the generated Zentra invite URL
+## Usage
 
-## Setup
+If you are not wanting to run your own instance of the bot, Zentra Main hosts an instance for you!
+
+To use, simple invite the bot to your server via this link and type /export_to_zentra! That's it!
+https://discord.com/oauth2/authorize?client_id=1221306509531680808
+
+## Custom Setup
 1. Ensure backend is running on `http://localhost:8080`.
 2. Set `DISCORD_IMPORT_TOKEN` in backend and bot to the same value.
 3. Copy `.env.example` to `.env` and fill all required values.
