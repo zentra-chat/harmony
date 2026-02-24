@@ -44,14 +44,30 @@ async function safeRespond(interaction, message) {
   });
 }
 
+function normalizeBaseUrl(rawValue) {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(rawValue);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return null;
+    }
+    return parsed.toString().replace(/\/$/, '');
+  } catch {
+    return null;
+  }
+}
+
 function getRuntimeConfig() {
   const token = process.env.DISCORD_BOT_TOKEN;
   const clientId = process.env.DISCORD_CLIENT_ID;
   const guildId = process.env.DISCORD_GUILD_ID;
   const commandScope = (process.env.DISCORD_COMMAND_SCOPE || 'global').toLowerCase();
 
-  const importToken = process.env.DISCORD_IMPORT_TOKEN;
-  const zentraBaseUrl = process.env.ZENTRA_BASE_URL || 'http://localhost:8080';
+  const defaultImportToken = process.env.DISCORD_IMPORT_TOKEN;
+  const defaultZentraBaseUrl = process.env.ZENTRA_BASE_URL || 'http://localhost:8080';
 
   if (!token) {
     throw new Error('Missing DISCORD_BOT_TOKEN.');
@@ -65,8 +81,13 @@ function getRuntimeConfig() {
   if (commandScope === 'guild' && !guildId) {
     throw new Error('DISCORD_GUILD_ID is required when DISCORD_COMMAND_SCOPE=guild.');
   }
-  if (!importToken) {
-    throw new Error('Missing DISCORD_IMPORT_TOKEN (must match backend DISCORD_IMPORT_TOKEN).');
+  if (defaultImportToken && defaultImportToken.length > 512) {
+    throw new Error('DISCORD_IMPORT_TOKEN is too long.');
+  }
+
+  const normalizedDefaultBaseUrl = normalizeBaseUrl(defaultZentraBaseUrl);
+  if (!normalizedDefaultBaseUrl) {
+    throw new Error('Invalid ZENTRA_BASE_URL. Use a valid http(s) URL.');
   }
 
   return {
@@ -74,8 +95,8 @@ function getRuntimeConfig() {
     clientId,
     guildId,
     commandScope,
-    importToken,
-    zentraBaseUrl,
+    defaultImportToken,
+    defaultZentraBaseUrl: normalizedDefaultBaseUrl,
   };
 }
 
@@ -160,6 +181,28 @@ async function run() {
       const inviteMaxUses = interaction.options.getInteger('invite_max_uses');
       const inviteExpiresSec = interaction.options.getInteger('invite_expires_sec');
       const maxMessagesPerChannel = interaction.options.getInteger('max_messages_per_channel') ?? 0;
+      const commandBaseUrl = interaction.options.getString('base_url');
+      const commandImportToken = interaction.options.getString('import_token');
+
+      const normalizedCommandBaseUrl = normalizeBaseUrl(commandBaseUrl);
+      if (commandBaseUrl && !normalizedCommandBaseUrl) {
+        await safeRespond(
+          interaction,
+          'Import failed: invalid base_url. Provide a full URL like https://community.example.com',
+        );
+        return;
+      }
+
+      const zentraBaseUrl = normalizedCommandBaseUrl || config.defaultZentraBaseUrl;
+
+      const importToken = commandImportToken || config.defaultImportToken;
+      if (!importToken) {
+        await safeRespond(
+          interaction,
+          'Import failed: missing import token. Set DISCORD_IMPORT_TOKEN in .env or pass import_token in the command.',
+        );
+        return;
+      }
 
       const payload = await buildDiscordImportPayload({
         guild: interaction.guild,
@@ -205,12 +248,14 @@ async function run() {
         guildId: interaction.guild.id,
         guildName: interaction.guild.name,
         ownerId,
+        zentraBaseUrl,
+        tokenSource: commandImportToken ? 'command' : 'env',
         payloadStats,
       });
 
       const imported = await uploadDiscordImport({
-        baseUrl: config.zentraBaseUrl,
-        importToken: config.importToken,
+        baseUrl: zentraBaseUrl,
+        importToken,
         payload,
       });
 
@@ -221,7 +266,7 @@ async function run() {
         durationMs: Date.now() - startedAt,
       });
 
-      const inviteAbsolute = toAbsoluteInviteUrl(config.zentraBaseUrl, imported.inviteUrl);
+      const inviteAbsolute = toAbsoluteInviteUrl(zentraBaseUrl, imported.inviteUrl);
       const counts = imported.importedCounts || { channels: 0, messages: 0, attachments: 0 };
 
       await interaction.editReply(

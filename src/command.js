@@ -38,4 +38,16 @@ export const EXPORT_COMMAND = new SlashCommandBuilder()
       .setName('max_messages_per_channel')
       .setDescription('0 = all messages (default: 0)')
       .setMinValue(0)
-      .setMaxValue(200000));
+      .setMaxValue(200000))
+  .addStringOption((option) =>
+    option
+      .setName('base_url')
+      .setDescription('Optional Zentra server base URL override for this run')
+      .setRequired(false),
+  )
+  .addStringOption((option) =>
+    option
+      .setName('import_token')
+      .setDescription('Optional import token override for this run')
+      .setRequired(false),
+  );
